@@ -59,7 +59,7 @@ async def health_check():
 async def concatenate_audio(request: Request, files: Optional[List[UploadFile]] = File(None)):
     """
     Concatena múltiplos arquivos de áudio na ordem recebida
-    VERSÃO COM DEBUG PARA N8N
+    VERSÃO COM DEBUG PARA N8N - ACEITA ARRAY DE ARQUIVOS
     """
     
     # DEBUG: Log da requisição recebida
@@ -75,17 +75,27 @@ async def concatenate_audio(request: Request, files: Optional[List[UploadFile]] 
             
             # Coletar arquivos do form-data
             files = []
+            
+            # Tentar coletar arquivos de diferentes formas
             for key, value in form.items():
                 print(f"Form field: {key}, type: {type(value)}")
                 if hasattr(value, 'filename') and hasattr(value, 'file'):
                     print(f"Encontrado arquivo: {value.filename}, content_type: {getattr(value, 'content_type', 'unknown')}")
                     files.append(value)
             
+            # Se não encontrou, tentar por prefix
             if not files:
-                # Tentar pegar campos que começam com "files"
-                for key, value in form.items():
-                    if key.startswith('files') and hasattr(value, 'filename'):
-                        print(f"Encontrado arquivo (prefix files): {key} -> {value.filename}")
+                # Coletar campos que começam com "file_" ou "files"
+                file_keys = [k for k in form.keys() if k.startswith(('file_', 'files'))]
+                print(f"Chaves de arquivo encontradas: {file_keys}")
+                
+                # Ordenar para manter sequência
+                file_keys.sort(key=lambda x: int(x.split('_')[-1]) if '_' in x and x.split('_')[-1].isdigit() else 0)
+                
+                for key in file_keys:
+                    value = form[key]
+                    if hasattr(value, 'filename') and hasattr(value, 'file'):
+                        print(f"Arquivo ordenado: {key} -> {value.filename}")
                         files.append(value)
                         
         except Exception as e:
@@ -97,7 +107,8 @@ async def concatenate_audio(request: Request, files: Optional[List[UploadFile]] 
     
     print(f"Arquivos recebidos: {len(files)}")
     for i, file in enumerate(files):
-        print(f"Arquivo {i}: {file.filename}, size: aprox {len(await file.read())} bytes")
+        content = await file.read()
+        print(f"Arquivo {i}: {file.filename}, size: {len(content)} bytes")
         await file.seek(0)  # Reset file pointer
     
     if len(files) < 2:
@@ -110,7 +121,6 @@ async def concatenate_audio(request: Request, files: Optional[List[UploadFile]] 
     try:
         # Salvar arquivos temporariamente
         for i, file in enumerate(files):
-            # Relaxar validação de content-type para debug
             print(f"Processando arquivo {i}: {file.filename}")
             
             # Extensão do arquivo
